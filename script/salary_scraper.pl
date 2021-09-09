@@ -1,4 +1,4 @@
-use strict;
+
 use WWW::Mechanize;
 use Web::Scraper;
 use DBI;
@@ -8,6 +8,11 @@ my $driver = 'SQLite';
 my $path_db = './database/salary_scraper.sqlite';
 
 my $dbh = DBI -> connect("DBI:$driver:dbname=$path_db","","",{ RaiseError => 1 }) or die $DBI::errstr;
+
+sub retrive_url{
+    my $idx = $_[0];
+    return "https://www.salary.com/tools/salary-calculator/search?keyword=developer&location=&page=$idx&selectedjobcodes=";
+}
 =a
 my $table_create = qq( CREATE TABLE salary_scraper (
     title TEXT,
@@ -24,11 +29,9 @@ my $table_create = qq( CREATE TABLE salary_scraper (
 my $exec_create_table = $dbh -> do($table_create) or die $DBI::errstr; 
 =cut
 my $q = "developer";
-my $url = "https://www.salary.com/tools/salary-calculator/search?keyword=developer&location=&page=1&selectedjobcodes=";
+my $url = retrive_url(1);
 
 my $start = scraper {
-    # Parse all TDs inside 'table[width="100%]"', store them into
-    # an array 'authors'.  We embed other scrapers for each TD.
     process 'nav[id="cityjobResultPagination"] ul[class="pagination"] li', "all[]" => scraper {
       process "a", link => '@href';
     };
@@ -43,12 +46,15 @@ my $idx = substr "$last_index->{link}",index("$last_index->{link}","page=")+5,2;
 
 print $idx;
 
-for my $uri (@{$res->{all}}) {
-    # output is like:
-    # Andy Adler      http://search.cpan.org/~aadler/
-    # Aaron K Dancygier       http://search.cpan.org/~aakd/
-    # Aamer Akhter    http://search.cpan.org/~aakhter/
-    #print Encode::encode("utf8", "$uri->{link}\n");
+my $data = scraper {
+    process 'div[class="sa-layout-section"] div[class="sal-popluar-skills"]','salary[]' => scraper {
+        process 'div[class="sal-jobtitle"]',title => 'TEXT';
+        process 'p[class="sal-jobdesc"]',url => '@href';
+    };
+};
+
+for(my $i = int($idx); $i > 0; $i--){
+	my $content = $data->scrape(URI -> new(retrive_url($i)));
 }
 
 
